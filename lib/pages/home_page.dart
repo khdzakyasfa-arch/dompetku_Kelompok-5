@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/transaction.dart';
 import '../providers/transaction_provider.dart';
 import '../widgets/kategori_card.dart';
@@ -14,7 +15,9 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  String selectedFilter = 'Hari'; // Options: 'Hari', 'Minggu', 'Bulan'
+  String selectedFilter =
+      'Hari'; // Filter rentang waktu: 'Hari', 'Minggu', 'Bulan'
+  String? activeCategory; // Filter kategori aktif (null = Tampilkan Semua)
 
   final kategoriList = [
     {
@@ -46,13 +49,20 @@ class _HomePageState extends ConsumerState<HomePage> {
   String formatRupiah(num number, {bool isMinus = false}) {
     String strVal = number.abs().toStringAsFixed(0);
     RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-    String formatted =
-        strVal.replaceAllMapped(reg, (Match m) => '${m[1]}.');
+    String formatted = strVal.replaceAllMapped(reg, (Match m) => '${m[1]}.');
     return isMinus ? '-Rp$formatted' : 'Rp$formatted';
   }
 
   String _formatHeaderTanggal(DateTime date) {
-    final days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    final days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
     final months = [
       'Jan',
       'Feb',
@@ -65,7 +75,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       'Sep',
       'Okt',
       'Nov',
-      'Des'
+      'Des',
     ];
     return '${days[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}';
   }
@@ -76,6 +86,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     List<TransactionModel> result = [];
 
+    // 1. Filter Kurun Waktu (Hari | Minggu | Bulan)
     if (selectedFilter == 'Hari') {
       result = list.where((tx) {
         final txDate = DateTime(tx.date.year, tx.date.month, tx.date.day);
@@ -84,7 +95,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     } else if (selectedFilter == 'Minggu') {
       final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
       result = list.where((tx) {
-        return tx.date.isAfter(startOfWeek.subtract(const Duration(seconds: 1)));
+        return tx.date.isAfter(
+          startOfWeek.subtract(const Duration(seconds: 1)),
+        );
       }).toList();
     } else if (selectedFilter == 'Bulan') {
       result = list.where((tx) {
@@ -94,12 +107,20 @@ class _HomePageState extends ConsumerState<HomePage> {
       result = List.from(list);
     }
 
+    // 2. Filter Kategori (Jika Aktif: Otomatis membuang Pemasukan dan kategori lain)
+    if (activeCategory != null) {
+      result = result
+          .where((tx) => tx.isPengeluaran && tx.kategori == activeCategory)
+          .toList();
+    }
+
     result.sort((a, b) => b.date.compareTo(a.date));
     return result;
   }
 
   Map<String, List<TransactionModel>> _groupTransactions(
-      List<TransactionModel> list) {
+    List<TransactionModel> list,
+  ) {
     final Map<String, List<TransactionModel>> grouped = {};
     for (var tx in list) {
       final header = _formatHeaderTanggal(tx.date);
@@ -117,12 +138,21 @@ class _HomePageState extends ConsumerState<HomePage> {
         .fold(0.0, (sum, item) => sum + item.nominal);
   }
 
+  double _hitungTotalKategoriFilter(List<TransactionModel> filteredList) {
+    return filteredList
+        .where((tx) => tx.isPengeluaran)
+        .fold(0.0, (sum, item) => sum + item.nominal);
+  }
+
   void _hapusDenganUndo(TransactionModel tx, int originalIndex) {
     ref.read(transactionProvider.notifier).deleteTransaction(tx.id);
 
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
+        backgroundColor: const Color(
+          0xFF0F172A,
+        ), // Diubah ke 0xFF0F172A agar sama dengan warna pekat Sisa Saldo
         content: Text('"${tx.judul}" dihapus'),
         duration: const Duration(seconds: 4),
         action: SnackBarAction(
@@ -141,9 +171,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   void _bukaTambahPengeluaran() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const TambahPengeluaranPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const TambahPengeluaranPage()),
     );
   }
 
@@ -181,26 +209,34 @@ class _HomePageState extends ConsumerState<HomePage> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
-                          Text('Selamat Pagi,',
-                              style: TextStyle(color: Colors.grey, fontSize: 13)),
-                          Text('Lapeace',
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A))),
+                          Text(
+                            'Selamat Pagi,',
+                            style: TextStyle(color: Colors.grey, fontSize: 13),
+                          ),
+                          Text(
+                            'Lapeace',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
                         ],
                       ),
                     ],
                   ),
+                  // Tombol Notifikasi (Latar Dark Slate + Ikon Emas)
                   Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1E293B),
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
-                    child: const Icon(Icons.notifications_none_rounded,
-                        color: Color(0xFF0F172A)),
+                    child: const Icon(
+                      Icons.notifications_none_rounded,
+                      color: Color(0xFFFEF08A),
+                      size: 22,
+                    ),
                   ),
                 ],
               ),
@@ -231,28 +267,39 @@ class _HomePageState extends ConsumerState<HomePage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Sisa Saldo',
-                            style: TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500)),
+                        const Text(
+                          'Sisa Saldo',
+                          style: TextStyle(
+                            color: Color(0xFFFEF08A), // Teks Sisa Saldo Emas
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withAlpha(25),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Row(
                             children: [
-                              Icon(Icons.shield_outlined,
-                                  color: Color(0xFF10B981), size: 14),
+                              Icon(
+                                Icons.shield_outlined,
+                                color: Color(0xFF10B981),
+                                size: 14,
+                              ),
                               SizedBox(width: 4),
-                              Text('Aktif',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold)),
+                              Text(
+                                'Aktif',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -262,9 +309,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                     Text(
                       formatRupiah(sisaSaldo),
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Divider(color: Colors.white.withAlpha(30)),
@@ -275,53 +323,74 @@ class _HomePageState extends ConsumerState<HomePage> {
                         Row(
                           children: [
                             const CircleAvatar(
-                                radius: 12,
-                                backgroundColor: Color(0xFF10B981),
-                                child: Icon(Icons.arrow_downward,
-                                    size: 14, color: Colors.white)),
+                              radius: 12,
+                              backgroundColor: Color(0xFF10B981),
+                              child: Icon(
+                                Icons.arrow_downward,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                            ),
                             const SizedBox(width: 8),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Pemasukan',
-                                    style: TextStyle(
-                                        color: Color(0xFF94A3B8),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500)),
-                                Text(formatRupiah(totalPemasukan),
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12)),
+                                const Text(
+                                  'Pemasukan',
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  formatRupiah(totalPemasukan),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
                         ),
                         Container(
-                            height: 24,
-                            width: 1,
-                            color: Colors.white.withAlpha(30)),
+                          height: 24,
+                          width: 1,
+                          color: Colors.white.withAlpha(30),
+                        ),
                         Row(
                           children: [
                             const CircleAvatar(
-                                radius: 12,
-                                backgroundColor: Color(0xFFEF4444),
-                                child: Icon(Icons.arrow_upward,
-                                    size: 14, color: Colors.white)),
+                              radius: 12,
+                              backgroundColor: Color(0xFFEF4444),
+                              child: Icon(
+                                Icons.arrow_upward,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                            ),
                             const SizedBox(width: 8),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Pengeluaran',
-                                    style: TextStyle(
-                                        color: Color(0xFF94A3B8),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500)),
-                                Text(formatRupiah(totalPengeluaran),
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12)),
+                                const Text(
+                                  'Pengeluaran',
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  formatRupiah(totalPengeluaran),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
@@ -337,13 +406,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                           foregroundColor: const Color(0xFF0F172A),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                           elevation: 0,
                         ),
                         onPressed: _bukaTambahPengeluaran,
                         icon: const Icon(Icons.add_circle_outline, size: 20),
-                        label: const Text('Catat Transaksi',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        label: const Text(
+                          'Catat Transaksi',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],
@@ -351,43 +423,153 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
               const SizedBox(height: 28),
 
-              // Kategori
-              const Text('Kategori',
-                  style: TextStyle(
+              // Kategori (Klik untuk Filter / Toggle)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Kategori',
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A))),
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  if (activeCategory != null)
+                    GestureDetector(
+                      onTap: () => setState(() => activeCategory = null),
+                      child: const Text(
+                        'Lihat Semua',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 16),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 16,
+                  horizontal: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: const Color(0xFFF1F5F9)),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withAlpha(8),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4))
+                      color: Colors.black.withAlpha(8),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: kategoriList
-                      .map((item) => KategoriCard(
-                            nama: item['nama'] as String,
-                            ikon: item['ikon'] as IconData,
-                            warnaIkon: item['warnaIkon'] as Color,
-                            warnaBg: item['warnaBg'] as Color,
-                          ))
-                      .toList(),
+                  children: kategoriList.map((item) {
+                    final String namaKat = item['nama'] as String;
+                    final bool isSelected = activeCategory == namaKat;
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (activeCategory == namaKat) {
+                            activeCategory = null; // Toggle OFF
+                          } else {
+                            activeCategory = namaKat; // Toggle ON
+                          }
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? (item['warnaBg'] as Color)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected
+                                ? (item['warnaIkon'] as Color)
+                                : Colors.transparent,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: KategoriCard(
+                          nama: namaKat,
+                          ikon: item['ikon'] as IconData,
+                          warnaIkon: item['warnaIkon'] as Color,
+                          warnaBg: item['warnaBg'] as Color,
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
               ),
+
+              // Banner Ringkasan Kategori (Warna disamakan dengan Sisa Saldo: Color(0xFF1E293B))
+              if (activeCategory != null) ...[
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.filter_list_rounded,
+                            color: Color(0xFFFEF08A),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Total $activeCategory ($selectedFilter): ',
+                            style: const TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            formatRupiah(
+                              _hitungTotalKategoriFilter(filteredList),
+                            ),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      GestureDetector(
+                        onTap: () => setState(() => activeCategory = null),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          color: Color(0xFFFEF08A),
+                          size: 18,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 28),
 
-              // Header Riwayat & Filter
-              // Header Riwayat & Filter
+              // Header Riwayat Transaksi & Filter Rentang Waktu
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -412,7 +594,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                           onTap: () => setState(() => selectedFilter = filter),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? Colors.white
@@ -440,7 +624,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
               const SizedBox(height: 16),
 
-              // List Riwayat dengan Header Total Harian
+              // List Riwayat Transaksi
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
@@ -449,23 +633,26 @@ class _HomePageState extends ConsumerState<HomePage> {
                   border: Border.all(color: const Color(0xFFF1F5F9)),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withAlpha(8),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4))
+                      color: Colors.black.withAlpha(8),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: groupedData.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.all(24.0),
                         child: Center(
-                            child: Text('Belum ada riwayat transaksi.',
-                                style: TextStyle(color: Colors.grey))),
+                          child: Text(
+                            'Belum ada riwayat transaksi.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
                       )
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: groupedData.entries.map((entry) {
-                          double totalHarian =
-                              _hitungTotalHarian(entry.value);
+                          double totalHarian = _hitungTotalHarian(entry.value);
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,8 +660,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                               // Header Tanggal + Total Harian
                               Container(
                                 width: double.infinity,
-                                padding:
-                                    const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  14,
+                                  16,
+                                  4,
+                                ),
                                 child: Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
@@ -489,7 +680,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                                     ),
                                     if (totalHarian > 0)
                                       Text(
-                                        formatRupiah(totalHarian, isMinus: true),
+                                        formatRupiah(
+                                          totalHarian,
+                                          isMinus: true,
+                                        ),
                                         style: const TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.bold,
@@ -506,8 +700,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   judul: tx.judul,
                                   subjudul:
                                       '${tx.kategori} • ${tx.jamFormatted}',
-                                  nominal: formatRupiah(tx.nominal,
-                                      isMinus: tx.isPengeluaran),
+                                  nominal: formatRupiah(
+                                    tx.nominal,
+                                    isMinus: tx.isPengeluaran,
+                                  ),
                                   ikon: tx.ikon,
                                   warnaIkon: tx.warnaIkon,
                                   warnaBg: tx.warnaBg,

@@ -208,7 +208,7 @@ class _TambahPengeluaranPageState
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
                             color: isPengeluaran
-                                ? const Color(0xFFEF4444)
+                                ? const Color(0xFFEF4444) // Merah Pengeluaran
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -234,7 +234,7 @@ class _TambahPengeluaranPageState
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
                             color: !isPengeluaran
-                                ? const Color(0xFF10B981)
+                                ? const Color(0xFF10B981) // Hijau Pemasukan
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -258,7 +258,7 @@ class _TambahPengeluaranPageState
               ),
               const SizedBox(height: 24),
 
-              // Input Tanggal (Google Form Style)
+              // Input Tanggal
               const Text(
                 'Tanggal Transaksi',
                 style: TextStyle(
@@ -442,13 +442,13 @@ class _TambahPengeluaranPageState
               ),
               const SizedBox(height: 28),
 
-              // Tombol Simpan
+              // Tombol Simpan (Warna disamakan dengan Sisa Saldo: Color(0xFF1E293B))
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
+                    backgroundColor: const Color(0xFF1E293B),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(25),
                     ),
